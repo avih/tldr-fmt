@@ -1,0 +1,342 @@
+#!/bin/sh
+
+# tldr-fmt - Format `tldr` pages or similar for terminal display.
+# Home page: https://github.com/avih/tldr-fmt
+#
+# BSD 2-Clause License
+#
+# Copyright (c) 2020, Avi Halachmi (:avih) avihpit@yahoo.com
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+set -eu
+LC_ALL=C  # internal (`case' patterns)
+unset -v IFS  # our quotes and code assume standard IFS
+
+
+# default styles - keep it simple and ubiquitous. see `tldr-fmt -j`.
+sH=${TF_H-bold,green}      #  |# Heading
+sQ=${TF_Q-green}           #  |> Quoted content
+sL=${TF_L-}  # natural     #  |- List item/example
+sC=${TF_C-bold}            #   ... `Code stuff` ...
+sA=${TF_A-cyan}            #   ... {{Argument}} ...
+sU=${TF_U-magenta}         #   ... <http://URL.org/foo> ...
+
+# default option values for -w, -i, -s and -b
+wrap=${TF_w-0} ind=${TF_i-0} styles=${TF_s-} bullc=${TF_b--}
+
+# Markdown bevior is very naive, but enough for tldr - and then some:
+# - head/list-item/quote always reset the style stack (no multi-level).
+# - head/list-item/quote continue implicitly until an empty line.
+# - right after explicit head/list-item we remove (up to one) empty line,
+#   to match the tldr source formatting, but it still continues implicitly.
+#   so for empty line after explicit head/list - it needs 2 empty input lines.
+# - currently there's no support for escaping.
+# - nesting is allowed selectively:
+#   - as noted, head/list-item/quote do not nest - they just replace.
+#   - inside or outside head/list-item/quote: detecting code/arguments/url.
+#   - inside code: detecting only arguments.
+#   - inside arguments/url: not trying to detect anything.
+# - our wrapping is not bad, but also not perfect:
+#   - in `{{file}}.ext` we incorrectly wrap ".ext" eventhough there's no space.
+#   - each input line is wrapped on its own - no multi-line-reflow, but:
+#     - enough for tldr: single-line list-items, quotes/desc should be short.
+#     - combining quotes unconditionally could hurt author's expectations.
+
+
+# pdksh/posh error incorrectly on $* with no args and set -u. use at least ""
+echo() { printf %s\\n "$*"; }  # fix for pdksh/posh without args: "${*+$*}"
+DBG() { [ -z "${DBG-}" ] || echo "$@"; }
+ESC=$(printf \\033)
+NL="
+"
+
+usage() { cat <<\USAGE
+# Usage: `tldr-fmt [{{OPTIONS}}] [{{FILE}}]...`
+> Format `tldr` pages or similar for terminal display.
+> With no {{FILE}}, or when {{FILE}} is `-`, read standard input.
+
+  `-w {{N}}`  Wrap at column {{N}}. Negative is from the end.
+  `-i {{N}}`  Indent examples by {{N}} characters (`0`..`8`).
+  `-b {{C}}`  Bullet {{C}}haracter when indent is 2 or more.
+  `-s {{N}}`  Use styles: `1`-yes/force  `0`-no (plain text).
+
+  `-h`    Display this help (styles/formats apply).
+  `-j`    Display additional styles/variables help.
+
+Requires: `tput` or `stty` if negative `-w` value is used.
+Report issues at <https://github.com/avih/tldr-fmt>.
+USAGE
+}
+
+usage_e() {
+    >&2 echo "Usage: tldr-fmt [-hjw:i:b:s:H:Q:L:C:A:U:] [FILE]..."
+    >&2 echo "Try -h for basic help, -j for extra help."
+    exit 1
+}
+
+usage_s() { cat <<\USAGE
+# Usage: `tldr-fmt [-{{hjw:i:b:s:H:Q:L:C:A:U:}}] [{{FILE}}]...`
+
+
+> Display styles can be set with options:
+
+The options `-H` (Heading), `-Q` (Quote), `-L` (List-item),
+`-C` (Code), `-A` (Argument) and `-U` (URL) set the styles.
+
+A Style is comma-separated list of colors, attributes
+and numeric SGR values which are applied in-order.
+Empty value will set the default (terminal) colors.
+Unknown element and any remains are taken literally.
+
+  E.g. `tldr-fmt -C {{bold}},{{inverse}},{{red}} -H ''`
+
+Supported names are: {{bold}}, {{italic}}, {{underline}}, {{inverse}},
+{{black}}, {{red}}, {{green}}, {{yellow}}, {{blue}}, {{magenta}}, {{cyan}}, {{white}}.
+
+Note: styles don't mix. E.g. green argument inside
+bold code will be plain green and not bold-green.
+
+> Environment variables can override default values:
+
+All default values can be overriden with var `TF_{{X}}`,
+where {{X}} is the option. E.g. `TF_w` sets the default
+wrap column, `TF_H` for the Heading style, etc. Don't
+forget to `export` any variables which you set.
+
+Command line options always set the final value.
+
+Report issues at <https://github.com/avih/tldr-fmt>.
+USAGE
+}
+
+
+# $1:STR, $2...: search items
+# if not found: PRE=$1 R= POST=, else: sets PRE R POST (R - the matched item)
+# if a search item is a prefix of another, the earlier in $2... is matched
+first() {
+    full=$1 PRE=$1 R= POST=; shift
+    for f; do
+        p=${full%%"$f"*}
+        [ ${#p} -ge ${#PRE} ] || PRE=$p R=$f POST=${full#*"$f"}
+    done
+}
+
+# $1: wrap-column. $2 allow-break $3: allow-all, $4:STR.
+# wraps at most once, sets PRE/POST. success if wrap was needed.
+# if allow-all is 0 then at least one item will stay at PRE, else it's
+# possible that PRE will be empty and everything will be in POST.
+wrap1() {
+    if [ ${#4} -le $1 ]; then  # it fits, no need to wrap
+        PRE=$4 POST=
+    elif [ $2 = 0 ]; then  # doesn't fit and can't break - all or nothing
+        [ $3 = 1 ] && PRE= POST=$4 || PRE=$4 POST=
+    else
+        wcol=$1 wpre= wpost=$4; [ $3 = 0 ] && wall= || wall=1
+        case $wpost in " "*) wsp=1; wcol=$((wcol-1));; *) wsp=; esac
+        while [ "$wpost" ]; do
+            first "$wpost" " "
+            wcan=${wpre:+$wpre }$PRE
+            if [ ${#wcan} -le $wcol ]; then
+                wpre=$wcan wpost=$POST wall=1
+            else
+                [ "$wall" ] || wpre=$wcan wpost=$POST
+                break;
+            fi
+        done
+        PRE=${wsp:+ }$wpre POST=${wpost#" "}
+        PRE=${PRE%" "}
+    fi
+    [ "$POST" ]
+}
+
+# process markdown
+tldr_style() {
+    spush() {  # $1: style code (H/Q/L/C/A/U)
+        eval sS=\$s$1
+        s=$1 stack=$stack/$1 out=$out$sS
+    }
+    spop() {
+        stack=${stack%/*}
+        s=${stack##*/}  # empty is fine, else its value starts with a reset
+        [ "$s" ] && eval sS=\$s$s || sS=  # sS used after reset, can be empty
+        [ "$s" ] && out=$out$sS || out=$out$sR  # but pop should reset if empty
+    }
+
+    s= sS= stack= skipnl=  # s is the top/current state at stack, sS is its seq
+    while IFS= read -r line || [ "$line" ]; do
+        [ "$line" ] || [ -z "$skipnl" ] || { skipnl=; continue; }
+        skipnl=
+        [ "$line" ] || { s= sS= stack=; echo ""; continue; }
+
+        out= len=0
+        case $line in  # explicit "top" containers reset the stack.
+            '> '*) s= stack=; spush Q; line=${line#??};;
+            '# '*) s= stack=; spush H; line=${line#??} skipnl=1;;
+            '- '*) s= stack=; spush L; line=${line#??} skipnl=1;;
+                *) out=$out$sS;; # terminal was reset after the prev input line
+        esac
+
+        case $skipnl-$stack in  # abuse skipnl to indicate explicit list-item
+           1-*L) out=$sR$indent0$sS len=$ind;;  # new indent/bullet
+           -*L*) out=$sR$indent$sS  len=$ind;;  # continued empty indent
+        esac
+
+        while [ "$line" ]; do
+            case $s in  # find (or not) different marks depending on state
+                U) first "$line" '>';;
+                A) first "$line" '}}';;
+                C) first "$line" '`' '{{'
+                   [ "$R" != '`' ] || R=\'  # code end is changed to ' (`foo')
+                   ;;
+                *) first "$line" '`' '{{' '<'
+            esac
+
+            if [ "$wrap" ] && [ $((len+${#PRE})) -gt $wrap ]; then
+                case $stack in
+                    *L*) c0=$ind trail=$sR$NL$indent$sS;;
+                      *) c0=0    trail=$sR$NL$sS
+                esac
+                # we wrap PRE (text to next mark), but save/restore R and POST.
+                # - FIXME: in {{file}}.ext we wrap ".ext" incorrectly (no space)
+                #   because "file" was already processed when we get to ".ext",
+                #   so now we can only choose between wrap/overflow. we wrap.
+                pre=$PRE r=$R post=$POST; [ "$s" = U ] && brk=0 || brk=1
+                while wrap1 $((wrap-len)) $brk $((len>c0)) "$pre"; do
+                    out=$out$PRE$trail len=$c0 pre=$POST
+                done
+                R=$r POST=$post  # PRE stays from wrap1 (can trimmed on "fail")
+            fi
+
+            len=$((len+${#PRE}))
+            out=$out$PRE
+            case $R in  # process the next detected mark, if at all
+                 '<') spush U;;
+                 '`') spush C;;
+                '{{') spush A;;
+                 ">") spop; POST=" "$POST;; # URL+space helps dbl-click-select
+            "}}"|"'") spop;;
+            esac
+            line=$POST
+        done
+
+        echo "$out$sR"
+    done
+}
+
+# "$*": style codes sequence to apply. result is in $R, remains are in $POST
+# this implementation always returns a sequence which starts with SGR0
+style_seq() {
+    R=0 L=$*
+    while [ "$L" ]; do
+        n=${L%%[!0-9]*}  # longest prefix sequence of digits (or empty)
+        if [ "$n" ]; then
+            L=${L#$n}
+        else
+            v=${L%%[!a-z]*}  # lower-case prefix or empty
+            case $v in
+                bold) n=1;; italic) n=3;; underline) n=4;; inverse) n=7;;
+                black) n=30;; red) n=31;; green) n=32;; yellow) n=33;;
+                blue) n=34;; magenta) n=35;; cyan) n=36;; white) n=37;;
+
+                *) break
+            esac
+            L=${L#$v}
+        fi
+        L=${L#?}  # strip delimiter to next item, if there is one
+        R=$R\;$n
+    done
+
+    R=$ESC[${R}m  POST=$L
+}
+
+is_num() { [ ${#1} -le 7 ] && case x$1 in x|x*[!0-9]*) false; esac; }
+
+wrap_ok() { [ -z "${1#-}" ] || is_num "${1#-}"; }  # "-"/empty are ok
+
+norm_wrap() {
+    [ "${wrap#-}" ] || wrap=${wrap}0
+    case $wrap in -*)  # calc, or disable wrap if not a tty or can't find width
+        [ -t 1 ] && w=$( (tput cols||stty size) 2>/dev/null) && w=${w#*" "} \
+        && is_num "$w" && wrap=$((w-${wrap#?}))
+    esac
+    [ $wrap -gt 0 ] || wrap=
+}
+
+# main
+help= badv=  # and set on top: wrap, ind, styles, sH, sQ...
+
+# ignore TF_b, only warn/ignore bad vars (else e.g. -h is blocked on bad env)
+wrap_ok "$wrap" || badv=\$TF_w
+case $ind     in 0|1|2|3|4|5|6|7|8);; *) badv=$badv" "\$TF_i; esac
+case x$styles in x0|x1|x);;           *) badv=$badv" "\$TF_p; esac
+if [ "$badv" ]; then
+    >&2 echo tldr-fmt: ignoring bad $badv value
+    wrap=0 ind=0 styles=
+fi
+
+while getopts hjw:i:b:s:H:Q:L:C:A:U: o; do
+    case $o in
+    b) bullc=$OPTARG;;
+    s) styles=$OPTARG;;
+    i) ind=$OPTARG;;
+    w) wrap=$OPTARG;;
+    h) help=usage;;  # keep collecting options
+    j) help=usage_s;;
+    [HQLCAU]) eval s$o=\$OPTARG;;
+    *) usage_e; exit 1
+    esac
+done
+shift $((OPTIND-1))
+
+# verification, normalization
+case x$styles in x0|x1|x);; *) usage_e; esac
+
+wrap_ok "$wrap" || usage_e
+norm_wrap
+
+case $ind in 0|1|2|3|4|5|6|7|8);; *) usage_e; esac
+indent=
+while [ ${#indent} -lt $ind ]; do indent=$indent" "; done
+
+[ "$bullc" ] || bullc=" ";
+[ $ind -lt 2 ] && indent0=$indent || indent0=${indent#??}$bullc" "
+
+# styles disabled by default if not a tty. -s0/1 can always override it.
+if ! [ "$styles" ] && ! [ -t 1 ] || [ "$styles" = 0 ]; then
+    sR= sH= sQ= sL= sC= sU= sA=
+else
+    # translate style variable codes to actual escape sequences
+    sR=  # used to print reset
+    for sv in sR sH sQ sL sC sU sA; do
+        eval 'style_seq "$'$sv'"; '$sv'=$R$POST'  # append leftovers literally
+    done
+fi
+
+
+# finally...
+if [ "$help" ]; then
+    $help | tldr_style  # format markdown regardless of styles
+else
+    cat -- "$@" | tldr_style
+fi
