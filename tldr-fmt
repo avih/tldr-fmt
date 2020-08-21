@@ -42,8 +42,8 @@ sC=${TF_C-bold}            #   ... `Code stuff` ...
 sA=${TF_A-cyan}            #   ... {{Argument}} ...
 sU=${TF_U-magenta}         #   ... <http://URL.org/foo> ...
 
-# default option values for -w, -i, -s and -b
-wrap=${TF_w-0} ind=${TF_i-0} styles=${TF_s-} bullc=${TF_b--}
+# default option values for -w, -i, -s, -b, -e
+wrap=${TF_w-0} ind=${TF_i-0} styles=${TF_s-} bullc=${TF_b--} efail=${TF_e-}
 
 # Markdown bevior is very naive, but enough for tldr - and then some:
 # - head/list-item/quote always reset the style stack (no multi-level).
@@ -80,6 +80,7 @@ usage() { cat <<\USAGE
   `-i {{N}}`  Indent examples by {{N}} characters (`0`..`8`).
   `-b {{C}}`  Bullet {{C}}haracter when indent is 2 or more.
   `-s {{N}}`  Use styles: `1`-yes/force  `0`-no (plain text).
+  `-e {{N}}`  Fail if input is empty: `1`-yes  `0`-no.
 
   `-h`    Display this help (styles/formats apply).
   `-j`    Display additional styles/variables help.
@@ -90,13 +91,13 @@ USAGE
 }
 
 usage_e() {
-    >&2 echo "Usage: tldr-fmt [-hjw:i:b:s:H:Q:L:C:A:U:] [FILE]..."
+    >&2 echo "Usage: tldr-fmt [-hje:w:i:b:s:H:Q:L:C:A:U:] [FILE]..."
     >&2 echo "Try -h for basic help, -j for extra help."
     exit 1
 }
 
 usage_s() { cat <<\USAGE
-# Usage: `tldr-fmt [-{{hjw:i:b:s:H:Q:L:C:A:U:}}] [{{FILE}}]...`
+# Usage: `tldr-fmt [-{{hje:w:i:b:s:H:Q:L:C:A:U:}}] [{{FILE}}]...`
 
 
 > Display styles can be set with options:
@@ -242,6 +243,7 @@ tldr_style() {
 
         echo "$out$sR"
     done
+    [ -z "$efail" ] || [ "${len-}" ]
 }
 
 # "$*": style codes sequence to apply. result is in $R, remains are in $POST
@@ -295,12 +297,13 @@ if [ "$badv" ]; then
     wrap=0 ind=0 styles=
 fi
 
-while getopts hjw:i:b:s:H:Q:L:C:A:U: o; do
+while getopts hje:w:i:b:s:H:Q:L:C:A:U: o; do
     case $o in
     b) bullc=$OPTARG;;
     s) styles=$OPTARG;;
     i) ind=$OPTARG;;
     w) wrap=$OPTARG;;
+    e) efail=$OPTARG;;
     h) help=usage;;  # keep collecting options
     j) help=usage_s;;
     [HQLCAU]) eval s$o=\$OPTARG;;
@@ -311,6 +314,7 @@ shift $((OPTIND-1))
 
 # verification, normalization
 case x$styles in x0|x1|x);; *) usage_e; esac
+[ "$efail" = 1 ] || efail=
 
 wrap_ok "$wrap" || usage_e
 norm_wrap
