@@ -79,7 +79,7 @@ fi
 # main - search the page
 for p in $plat; do
   for l in $lang ''; do
-    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | tldr-fmt -e1 "$@" && exit
+    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | tldr-fmt -e1 "$@" && exit || :
   done
 done
 err "\`$cmd' page not found (at: $plat)"
