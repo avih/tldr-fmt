@@ -1,35 +1,10 @@
 #!/bin/sh
 # ttldr: Tiny tldr client, uses tldr-fmt for display
+# See also: online-only tiny client at the bottom of this file.
 # Copyright (c) 2020, Avi Halachmi (:avih) avihpit@yahoo.com
 # BSD 2-Clause License - see LICENSE file
 set -eu
 unset -v IFS
-
-
-# in this comment is a complete online-only client which doesn't touch local
-# files. but the tldr maintainers prefer that clients don't hammer individual
-# pages due to bandwidth limits. see:
-#   https://github.com/tldr-pages/tldr/wiki/Minimum-specifications-for-tldr-pages-command-line-clients
-# so this online-only implementation is in comment for posterity.
-:<<\ONLINE-ONLY
-case x${1-} in x|x-*)
-      [ "${1-}" = -h ] && o=1 || o=2
->&$o  echo Usage: [TT_LANG=LANG] ttldr CMD [tldr-fmt options]...
->&$o  echo Tiny, online-only tldr client. Tries CMD page in [LANG +] English.
->&$o  echo Languages: es, it, ko, pt_BR, zh, or any other at the tldr repo.
->&$o  echo Requires: curl, tldr-fmt. Home: https://github.com/avih/tldr-fmt
-      [ $o = 1 ] && exit || exit
-esac
-cmd=$1; shift
-
-base=https://raw.githubusercontent.com/tldr-pages/tldr/master/pages
-for plat in common linux osx windows sunos; do  # from most to least pages
-    for lng in ${TT_LANG-} ''; do
-        curl -sf "$base${lng:+.$lng}/$plat/$cmd.md" | tldr-fmt -e1 "$@" && exit
-    done
-done
->&2 printf %s\\n "ttldr: page not found -- \`$cmd'" && falae
-ONLINE-ONLY
 
 
 # defaults (only lang and plats can be overriden at the command line):
@@ -108,3 +83,31 @@ for p in $plat; do
   done
 done
 err "\`$cmd' page not found (at: $plat)"
+
+
+########## END OF SCRIPT ############
+
+# in this comment is a complete online-only client which doesn't touch local
+# files. but the tldr maintainers prefer that clients don't hammer individual
+# pages due to bandwidth limits. see:
+#   https://github.com/tldr-pages/tldr/wiki/Minimum-specifications-for-tldr-pages-command-line-clients
+# so this online-only implementation is in comment for posterity.
+:<<\ONLINE-ONLY
+case x${1-} in x|x-*)
+      [ "${1-}" = -h ] && o=1 || o=2
+>&$o  echo Usage: [TT_LANG=LANG] ttldr CMD [tldr-fmt options]...
+>&$o  echo Tiny, online-only tldr client. Tries CMD page in [LANG +] English.
+>&$o  echo Languages: es, it, ko, pt_BR, zh, or any other at the tldr repo.
+>&$o  echo Requires: curl, tldr-fmt. Home: https://github.com/avih/tldr-fmt
+      [ $o = 1 ] && exit || exit
+esac
+cmd=$1; shift
+
+base=https://raw.githubusercontent.com/tldr-pages/tldr/master/pages
+for plat in common linux osx windows sunos; do  # from most to least pages
+    for lng in ${TT_LANG-} ''; do
+        curl -sf "$base${lng:+.$lng}/$plat/$cmd.md" | tldr-fmt -e1 "$@" && exit
+    done
+done
+>&2 printf %s\\n "ttldr: page not found -- \`$cmd'" && falae
+ONLINE-ONLY
