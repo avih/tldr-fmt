@@ -23,13 +23,21 @@ Report issues at https://github.com/avih/tldr-fmt .
 
 Note: `tldr-fmt` only does formatting - it does not fetch or cache pages, etc.
 
-You can try the [ttldr](ttldr) `sh` script in this repo - a tiny, online-only
-tldr client which uses `tldr-fmt` to format and display pages. Here's its help
-page:
+
+# ttldr
+Tiny tldr client which only finds/fetches the page, and uses `tldr-fmt` for
+display, also implemented as a strict POSIX `sh` script.
 
 ```
-Usage: [TT_LANG=LANG] ttldr CMD [tldr-fmt options]...
-Tiny, online-only tldr client. Tries CMD page in [LANG +] English.
-Languages: es, it, ko, pt_BR, zh, or any other at the tldr repo.
-Requires: curl, tldr-fmt. Home: https://github.com/avih/tldr-fmt
+Usage: ttldr CMD | PLAT/CMD | LANG/[PLAT]/CMD  [tldr-fmt options]...
+Tiny tldr client, uses tldr-fmt for display.
+
+Usage examples: ttldr curl, ttldr linux/curl, ttldr it//curl, etc.
+
+Display the tldr page for CMD [on platform PLAT], in [LANG or] English.
+Languages: es, it, ko, pt_BR, zh, or any other which tldr supports.
+
+Default values and environment variables for overrides are documented
+at the `# defaults' section of this script: `which ttldr`
+Requires: curl, unzip, tldr-fmt. Home: https://github.com/avih/tldr-fmt
 ```

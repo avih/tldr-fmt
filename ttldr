@@ -1,8 +1,17 @@
 #!/bin/sh
-# ttldr: Tiny, online-only tldr client which uses tldr-fmt
+# ttldr: Tiny tldr client, uses tldr-fmt for display
 # Copyright (c) 2020, Avi Halachmi (:avih) avihpit@yahoo.com
 # BSD 2-Clause License - see LICENSE file
+set -eu
+unset -v IFS
 
+
+# in this comment is a complete online-only client which doesn't touch local
+# files. but the tldr maintainers prefer that clients don't hammer individual
+# pages due to bandwidth limits. see:
+#   https://github.com/tldr-pages/tldr/wiki/Minimum-specifications-for-tldr-pages-command-line-clients
+# so this online-only implementation is in comment for posterity.
+:<<\ONLINE-ONLY
 case x${1-} in x|x-*)
       [ "${1-}" = -h ] && o=1 || o=2
 >&$o  echo Usage: [TT_LANG=LANG] ttldr CMD [tldr-fmt options]...
@@ -20,3 +29,82 @@ for plat in common linux osx windows sunos; do  # from most to least pages
     done
 done
 >&2 printf %s\\n "ttldr: page not found -- \`$cmd'" && falae
+ONLINE-ONLY
+
+
+# defaults (only lang and plats can be overriden at the command line):
+days=${TT_DAYS-30}  # days old cache before trying to update. empty is never
+lang=${TT_LANG-}    # default language to try before English
+file=${TT_FILE:-${HOME:-~}/.cache/ttldr/tldr.zip}   # never extracted to disk
+plats=${TT_PLATS:-"common linux osx windows sunos"} # platforms+order to search
+url=${TT_URL:-https://tldr.sh/assets/tldr.zip}
+
+
+msg() { >&2 printf %s\\n "ttldr: $*"; }
+err() {  # $1:err-str (empty to skip)  $2:non-empty to add usage note
+    [ -z "${1}" ] || msg "$1"
+    [ "${2-}" ] || exit 1
+    >&2 echo "Usage: ttldr CMD | PLAT/CMD | LANG/[PLAT]/CMD  [tldr-fmt options]..."
+    >&2 echo "try ttldr -h for help."
+    exit 1
+}
+
+# sanity check and -h handling
+case x${1-} in x|x-*)
+    [ "${1-}" = -h ] || err "" usage
+    echo "Usage: ttldr CMD | PLAT/CMD | LANG/[PLAT]/CMD  [tldr-fmt options]..."
+    echo "Tiny tldr client, uses tldr-fmt for display."
+    echo ""
+    echo "Usage examples: ttldr curl, ttldr linux/curl, ttldr it//curl, etc."
+    echo ""
+    echo "Display the tldr page for CMD [on platform PLAT], in [LANG or] English."
+    echo "Languages: es, it, ko, pt_BR, zh, or any other which tldr supports."
+    echo ""
+    echo "Default values and environment variables for overrides are documented"
+    echo "at the \`# defaults' section of this script: `which ttldr`"
+    echo "Requires: curl, unzip, tldr-fmt. Home: https://github.com/avih/tldr-fmt"
+    exit
+esac
+input=$1; shift
+
+
+# interpret input
+case $input in
+*/*/*/*) err "unknown target \`$input'" usage;;
+*/*/*)   lang=${input%%/*} plat=${input#*/}; plat=${plat%/*} cmd=${input##*/};;
+*/*)     plat=${input%/*} cmd=${input#*/};;
+*)       cmd=$input;;
+esac
+[ "$cmd" ] || err "missing CMD" usage
+[ "${plat-}" ] || plat=$plats
+
+
+# verify requirements
+{ which curl && which unzip && which tldr-fmt; } > /dev/null \
+    || err "missing curl/unzip/tldr-fmt"
+
+
+# initial fetch if there's no cache file
+if ! [ -f "$file" ]; then
+    msg downloading pages archive as "'$file'" ...
+    curl --create-dir -o "$file" "$url" \
+        || err "cannot download/save archive"
+fi
+
+
+# try to update if allowed and old enough. on failure - next time is in $days
+[ -z "$days" ] || ! [ "$(find "$file" -mtime +"$days" -print)" ] \
+    || { >&2 msg checking for udpates...; curl -o "$file" -z "$file" "$url"; } \
+    || { >&2 msg pages not updated; touch "$file" 2>/dev/null; } || :
+
+
+# ensure we have at least one arg, else some shells error on "$@" with set -u
+[ "$#" -ge 1 ] || set -- -
+
+# main - search the page
+for p in $plat; do
+  for l in $lang ''; do
+    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | tldr-fmt -e1 "$@" && exit
+  done
+done
+err "\`$cmd' page not found (at: $plat)"
