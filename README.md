@@ -4,8 +4,6 @@ Format [tldr](https://tldr.sh/) pages or similar for terminal display
 Implemented as a strict POSIX shell script with some formatting and style
 options, including word-wrapping (off by default).
 
-Note: it only does formatting - it does not fetch or cache pages, etc.
-
 ```
 Usage: tldr-fmt [OPTIONS] [FILE]...
 Format tldr pages or similar for terminal display.
@@ -21,4 +19,17 @@ With no FILE, or when FILE is -, read standard input.
 
 Requires: tput or stty if negative -w value is used.
 Report issues at https://github.com/avih/tldr-fmt .
+```
+
+Note: `tldr-fmt` only does formatting - it does not fetch or cache pages, etc.
+
+You can try the [ttldr](ttldr) `sh` script in this repo - a tiny, online-only
+tldr client which uses `tldr-fmt` to format and display pages. Here's its help
+page:
+
+```
+Usage: [TT_LANG=LANG] ttldr CMD [tldr-fmt options]...
+Tiny, online-only tldr client. Tries CMD page in [LANG +] English.
+Languages: es, it, ko, pt_BR, zh, or any other at the tldr repo.
+Requires: curl, tldr-fmt. Home: https://github.com/avih/tldr-fmt
 ```
