@@ -276,10 +276,11 @@ is_num() { [ ${#1} -le 7 ] && case x$1 in x|x*[!0-9]*) false; esac; }
 
 wrap_ok() { [ -z "${1#-}" ] || is_num "${1#-}"; }  # "-"/empty are ok
 
+tsize() { { stty size || stty -F/dev/tty size || tput cols; } 2>/dev/null; }
 norm_wrap() {
     [ "${wrap#-}" ] || wrap=${wrap}0
     case $wrap in -*)  # calc, or disable wrap if not a tty or can't find width
-        [ -t 1 ] && w=$( (tput cols||stty size) 2>/dev/null) && w=${w#*" "} \
+        [ -t 1 ] && w=$( [ -t 0 ] && tsize || tsize </dev/tty) && w=${w#*" "} \
         && is_num "$w" && wrap=$((w-${wrap#?}))
     esac
     [ $wrap -gt 0 ] || wrap=
@@ -342,5 +343,5 @@ fi
 if [ "$help" ]; then
     $help | tldr_style  # format markdown regardless of styles
 else
-    cat -- "$@" | tldr_style
+    cat -- ${1+"$@"} | tldr_style
 fi
