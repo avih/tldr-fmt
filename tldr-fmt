@@ -183,14 +183,20 @@ tldr_style() {
         [ "$s" ] && eval sS=\$s$s || sS=  # sS used after reset, can be empty
         [ "$s" ] && out=$out$sS || out=$out$sR  # but pop should reset if empty
     }
+    do_last_line() {  # our stdin always ends in 0/1 - reflects cat exit code.
+        errin=
+        case $line in *1) errin=1; esac
+        line=${line%?}
+        [ "$line" ]
+    }
 
     s= sS= stack= skipnl=  # s is the top/current state at stack, sS is its seq
-    while IFS= read -r line || [ "$line" ]; do
+    while IFS= read -r line || do_last_line; do
+        out= len=0
         [ "$line" ] || [ -z "$skipnl" ] || { skipnl=; continue; }
         skipnl=
         [ "$line" ] || { s= sS= stack=; echo ""; continue; }
 
-        out= len=0
         case $line in  # explicit "top" containers reset the stack.
             '> '*) s= stack=; spush Q; line=${line#??};;
             '# '*) s= stack=; spush H; line=${line#??} skipnl=1;;
@@ -243,7 +249,7 @@ tldr_style() {
 
         echo "$out$sR"
     done
-    [ -z "$efail" ] || [ "${len-}" ]
+    [ -z "$errin" ] && { [ -z "$efail" ] || [ "${len-}" ]; }
 }
 
 # "$*": style codes sequence to apply. result is in $R, remains are in $POST
@@ -343,5 +349,5 @@ fi
 if [ "$help" ]; then
     $help | tldr_style  # format markdown regardless of styles
 else
-    cat -- ${1+"$@"} | tldr_style
+    { cat -- ${1+"$@"} && printf 0 || printf 1; } | tldr_style
 fi
