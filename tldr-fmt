@@ -282,12 +282,12 @@ is_num() { [ ${#1} -le 7 ] && case x$1 in x|x*[!0-9]*) false; esac; }
 
 wrap_ok() { [ -z "${1#-}" ] || is_num "${1#-}"; }  # "-"/empty are ok
 
-tsize() { { stty size || stty -F/dev/tty size || tput cols; } 2>/dev/null; }
+tsize() { stty size || stty -F/dev/tty size || tput cols; }
 norm_wrap() {
     [ "${wrap#-}" ] || wrap=${wrap}0
     case $wrap in -*)  # disable wrap if not a tty, else find or fallback to 80
         [ -t 1 ] || { wrap=; return; }
-        w=$( [ -t 0 ] && tsize || { tsize </dev/tty; } 2>/dev/null) && w=${w#*" "} \
+        w=$( [ -t 0 ] && tsize || tsize </dev/tty) 2>/dev/null && w=${w#*" "} \
             && is_num "$w" || w=80
         wrap=$((w-${wrap#?}))
     esac
