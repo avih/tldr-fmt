@@ -14,6 +14,7 @@ With no FILE, or when FILE is -, read standard input.
   -i N  Indent examples by N characters (0..8).
   -b C  Bullet Character when indent is 2 or more.
   -s N  Use styles: 1-yes/force  0-no (plain text).
+  -e N  Exit code for empty input (bad OPTIONS is 1, bad FILE is 2).
 
   -h    Display this help (styles/formats apply).
   -j    Display additional styles/variables help.
@@ -26,7 +27,7 @@ Note: `tldr-fmt` only does formatting - it does not fetch or cache pages, etc.
 
 
 # ttldr
-Tiny tldr client which only finds/fetches the page, and uses `tldr-fmt` for
+Tiny tldr client which finds/fetches the page, and uses `tldr-fmt` for
 display, also implemented as a strict POSIX `sh` script.
 
 The tldr pages archive is download and kept as a zip file (never extracted),
@@ -51,6 +52,8 @@ Languages: es, it, ko, pt_BR, zh, or any other which tldr supports.
 
 Default values and environment variables for overrides are documented
 at the `# defaults' section of this script: `which ttldr`
+
+For help on tldr-fmt options: ttldr dummy -h (or tldr-fmt -h).
 
 Requires: curl, unzip, tldr-fmt.
 Report issues at https://github.com/avih/tldr-fmt .
