@@ -54,8 +54,20 @@ esac
 [ "${plat-}" ] || plat=$plats
 
 
+# minimal "find command's real path". if readlink -f fails, parse `ls -l` once
+cmdpath() {
+    case $1 in */*);; *) set -- "$(command -v "$1")"; esac
+    readlink -f -- "$1" 2>/dev/null && return
+    [ -L "$1" ] || { printf %s\\n "$1" && return; }
+    ls -l -- "$1" | sed 's/.*-> //'  # assume one "-> " at the output
+}
+# if not in PATH - try to find tldr-fmt relative to [symlink] $0
+fmt=tldr-fmt
+command -v "$fmt" >/dev/null \
+    || { self=$(cmdpath "$0") && fmt=${self%/*}/$fmt; }
+
 # verify requirements
-{ which curl && which unzip && which tldr-fmt; } > /dev/null \
+{ command -v curl && command -v unzip && command -v "$fmt"; } > /dev/null \
     || err "missing curl/unzip/tldr-fmt"
 
 
@@ -79,7 +91,7 @@ fi
 # main - search the page
 for p in $plat; do
   for l in $lang ''; do
-    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | tldr-fmt -e1 "$@" && exit || :
+    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | "$fmt" -e1 "$@" && exit || :
   done
 done
 err "\`$cmd' page not found (at: $plat)"
