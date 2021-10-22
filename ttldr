@@ -37,7 +37,9 @@ case x${1-} in x|x-*)
     echo ""
     echo "Default values and environment variables for overrides are documented"
     echo "at the \`# defaults' section of this script: `which ttldr`"
-    echo "Requires: curl, unzip, tldr-fmt. Home: https://github.com/avih/tldr-fmt"
+    echo ""
+    echo "Requires: curl, unzip, tldr-fmt."
+    echo "Report issues at https://github.com/avih/tldr-fmt ."
     exit
 esac
 input=$1; shift

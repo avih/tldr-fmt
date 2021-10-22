@@ -51,5 +51,7 @@ Languages: es, it, ko, pt_BR, zh, or any other which tldr supports.
 
 Default values and environment variables for overrides are documented
 at the `# defaults' section of this script: `which ttldr`
-Requires: curl, unzip, tldr-fmt. Home: https://github.com/avih/tldr-fmt
+
+Requires: curl, unzip, tldr-fmt.
+Report issues at https://github.com/avih/tldr-fmt .
 ```
