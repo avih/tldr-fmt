@@ -91,14 +91,14 @@ fi
 [ "$#" -ge 1 ] || set -- -
 
 # main - search the page
+e=0
 for p in $plat; do
   for l in $lang ''; do
-    e=0
-    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | "$fmt" -e42 "$@" || e=$?
-    [ "$e" = 42 ] || exit "$e" # success, or tdlr-fmt error other than empty-input
+    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null && break 2 || continue
   done
-done
-err "\`$cmd' page not found (at: $plat)"
+done | "$fmt" -e42 "$@" || e=$?
+# 42 is empty-input (CMD not found), else success/other-error
+[ "$e" = 42 ] && err "\`$cmd' page not found (at: $plat)" || exit "$e"
 
 
 ########## END OF SCRIPT ############
