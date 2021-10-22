@@ -93,7 +93,9 @@ fi
 # main - search the page
 for p in $plat; do
   for l in $lang ''; do
-    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | "$fmt" -e1 "$@" && exit || :
+    e=0
+    unzip -p "$file" "pages${l:+.$l}/$p/$cmd.md" 2>/dev/null | "$fmt" -e42 "$@" || e=$?
+    [ "$e" = 42 ] || exit "$e" # success, or tdlr-fmt error other than empty-input
   done
 done
 err "\`$cmd' page not found (at: $plat)"
