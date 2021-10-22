@@ -43,7 +43,7 @@ sA=${TF_A-cyan}            #   ... {{Argument}} ...
 sU=${TF_U-magenta}         #   ... <http://URL.org/foo> ...
 
 # default option values for -w, -i, -s, -b, -e
-wrap=${TF_w-0} ind=${TF_i-0} styles=${TF_s-} bullc=${TF_b--} efail=${TF_e-}
+wrap=${TF_w-0} ind=${TF_i-0} styles=${TF_s-} bullc=${TF_b--} efail=${TF_e:-0}
 
 # Markdown bevior is very naive, but enough for tldr - and then some:
 # - head/list-item/quote always reset the style stack (no multi-level).
@@ -80,7 +80,7 @@ usage() { cat <<\USAGE
   `-i {{N}}`  Indent examples by {{N}} characters (`0`..`8`).
   `-b {{C}}`  Bullet {{C}}haracter when indent is 2 or more.
   `-s {{N}}`  Use styles: `1`-yes/force  `0`-no (plain text).
-  `-e {{N}}`  Fail if input is empty: `1`-yes  `0`-no.
+  `-e {{N}}`  Exit code for empty input (bad {{OPTIONS}} is `1`, bad {{FILE}} is `2`).
 
   `-h`    Display this help (styles/formats apply).
   `-j`    Display additional styles/variables help.
@@ -249,7 +249,8 @@ tldr_style() {
 
         echo "$out$sR"
     done
-    [ -z "$errin" ] && { [ -z "$efail" ] || [ "${len-}" ]; }
+    [ -z "$errin" ] || exit 2
+    [ "${len-}" ] || exit "$efail"
 }
 
 # "$*": style codes sequence to apply. result is in $R, remains are in $POST
@@ -323,7 +324,7 @@ shift $((OPTIND-1))
 
 # verification, normalization
 case x$styles in x0|x1|x);; *) usage_e; esac
-[ "$efail" = 1 ] || efail=
+is_num "$efail" || usage_e
 
 wrap_ok "$wrap" || usage_e
 norm_wrap
