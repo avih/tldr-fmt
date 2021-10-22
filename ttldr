@@ -38,6 +38,8 @@ case x${1-} in x|x-*)
     echo "Default values and environment variables for overrides are documented"
     echo "at the \`# defaults' section of this script: `which ttldr`"
     echo ""
+    echo "For help on tldr-fmt options: ttldr dummy -h (or tldr-fmt -h)."
+    echo ""
     echo "Requires: curl, unzip, tldr-fmt."
     echo "Report issues at https://github.com/avih/tldr-fmt ."
     exit
