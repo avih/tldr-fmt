@@ -120,7 +120,7 @@ case x${1-} in x|x-*)
 esac
 cmd=$1; shift
 
-base=https://raw.githubusercontent.com/tldr-pages/tldr/master/pages
+base=https://raw.githubusercontent.com/tldr-pages/tldr/main/pages
 for plat in common linux osx windows sunos; do  # from most to least pages
     for lng in ${TT_LANG-} ''; do
         curl -sf "$base${lng:+.$lng}/$plat/$cmd.md" | tldr-fmt -e1 "$@" && exit
